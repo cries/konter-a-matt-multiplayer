@@ -17,30 +17,23 @@ public class CardTable extends CardGame
   {
     ACE, KING, QUEEN, JACK, TEN, NINE
   }
-  //
+  
   protected static Deck deck = new Deck(Suit.values(), Rank.values(), "cover");
-  //private Card trump = null;
   private final int nbPlayers = 4;
   private final int nbStartCards = 3;
   private final int handWidth = 300;
-	private final Location[] handLocations = {
-			new Location(350, 625),
-			new Location(75, 350),
-			new Location(350, 75),
-			new Location(625, 350)
-		};
-		private final Location[] bidLocations = {
-		    new Location(350, 400),
-		    new Location(300, 350),
-		    new Location(350, 300),
-		    new Location(400, 350)
-		};
-		private final Location[] stockLocations = {
-		    new Location(570, 625),
-		    new Location(75, 570),
-		    new Location(130, 75),
-		    new Location(625, 130)
-		};
+  private final Location[] handLocations = {
+	new Location(350, 625),
+	new Location(75, 350),
+	new Location(350, 75),
+	new Location(625, 350)
+  };
+  private final Location[] stockLocations = {
+    new Location(570, 625),
+    new Location(75, 570),
+    new Location(130, 75),
+    new Location(625, 130)
+  };
   private final Location talonLocation = new Location(350, 350);
   private final Location lineLocation = new Location(275, 350);
   private Hand[] hands = new Hand[nbPlayers];
@@ -70,6 +63,10 @@ public class CardTable extends CardGame
 		private ToolBar toolBar = new ToolBar(this);
 		
   private int targetCount = 0;
+  private int firstPlayer = 0;
+  private int nbMovesInRound = 0;
+  
+  private Card trump = null;
 
   public CardTable(TcpAgent agent, String[] playerNames,int currentPlayerIndex)
   {
@@ -86,20 +83,6 @@ public class CardTable extends CardGame
   {
     for (int i = 0; i < nbPlayers; i++)
     {
-		bids[i] = new Hand(deck);
-		int bidLoc = (i - currentPlayerIndex);
-		if (bidLoc < 0) {
-			bidLoc = bidLoc + 4;
-		}
-		System.out.println("Player: " + currentPlayerIndex + " Bidloc: " + bidLoc);
-	    bids[i].setView(this, new StackLayout(bidLocations[bidLoc]));
-	    bids[i].addCardListener(new CardAdapter() {
-	        public void atTarget(Card card, Location loc){
-	          targetCount++;
-	          if (targetCount == nbPlayers)
-	        	  Monitor.wakeUp();
-	        }
-	    });
       hands[i] = new Hand(deck);
       for (int k = 0; k < nbStartCards; k++)
         hands[i].insert(cardNumbers[i * nbStartCards + k], false);
@@ -108,8 +91,8 @@ public class CardTable extends CardGame
     RowLayout myLineLayout = new RowLayout(lineLocation, 250);
     myLineLayout.setCardAlignment(CardAlignment.FIRST);
     line.setView(this, myLineLayout);
-    
     RowLayout[] layouts = new RowLayout[nbPlayers];
+    
     for (int i = 0; i < nbPlayers; i++)
     {
       int k = (currentPlayerIndex + i) % nbPlayers;
@@ -137,16 +120,104 @@ public class CardTable extends CardGame
     {
       public void leftDoubleClicked(Card card)
       {
-        hands[currentPlayerIndex].setTouchEnabled(false);
-        agent.sendCommand("", CardPlayer.Command.CARD_TO_LINE,
-          currentPlayerIndex, card.getCardNumber());
-          card.transfer(line, true);
-        //makeBid(card);
-        agent.sendCommand("", CardPlayer.Command.READY_TO_PLAY);
+    	final Card firstCard;
+    	
+    	if (currentPlayerIndex != firstPlayer) {
+    		firstCard = line.getFirst();
+    		if (firstCard.getSuit() == trump.getSuit()
+				|| (firstCard.getRank() == Rank.QUEEN  
+					&& (firstCard.getSuit() == Suit.SPADES 
+					|| firstCard.getSuit() == Suit.HEARTS 
+					|| firstCard.getSuit() == Suit.DIAMONDS))) {
+				// War dei gewielten Kaart eng Tromp?
+				if (card.getSuit() == trump.getSuit()
+					|| (card.getRank() == Rank.QUEEN 
+						&& (card.getSuit() == Suit.SPADES
+						|| card.getSuit() == Suit.HEARTS
+						|| card.getSuit() == Suit.DIAMONDS))) {
+					// Dei gewielten Kaart spillen
+					agent.sendCommand("", CardPlayer.Command.CARD_TO_LINE,
+				              currentPlayerIndex, card.getCardNumber());
+					makeBid(card);
+					agent.sendCommand("", CardPlayer.Command.READY_TO_PLAY);
+				} else {
+					// Huet den Spiller iwerhapt Tremp?
+					if (hands[currentPlayerIndex].extractCardsWithSuit(trump.getSuit()).getNumberOfCards() > 0
+						|| hands[currentPlayerIndex].extractCardsWithRank(Rank.QUEEN).getNumberOfCardsWithSuit(Suit.SPADES) > 0
+						|| hands[currentPlayerIndex].extractCardsWithRank(Rank.QUEEN).getNumberOfCardsWithSuit(Suit.HEARTS) > 0
+						|| hands[currentPlayerIndex].extractCardsWithRank(Rank.QUEEN).getNumberOfCardsWithSuit(Suit.DIAMONDS) > 0) {
+						// Tromp muss bekannt gin
+						setStatusText("Tromp bekennen!");
+					} else {
+						// Dei gewielten Kaart spillen
+						agent.sendCommand("", CardPlayer.Command.CARD_TO_LINE,
+					              currentPlayerIndex, card.getCardNumber());
+						makeBid(card);
+						agent.sendCommand("", CardPlayer.Command.READY_TO_PLAY);
+					}
+				}
+			} else {
+				// As dei gewielten Kaart eng Tromp?
+				if (card.getSuit() == trump.getSuit()
+					|| (card.getRank() == Rank.QUEEN 
+    				  	&& (card.getSuit() == Suit.SPADES
+    					|| card.getSuit() == Suit.HEARTS
+    					|| card.getSuit() == Suit.DIAMONDS))) {
+					// Gewielte Kaart spillen
+					agent.sendCommand("", CardPlayer.Command.CARD_TO_LINE,
+				              currentPlayerIndex, card.getCardNumber());
+					makeBid(card);
+					agent.sendCommand("", CardPlayer.Command.READY_TO_PLAY);
+				} else {
+					// Huet dei gewielten Kaart dei selwecht Suit wei dei eischt?
+					// (huet bekannt)
+					if (card.getSuit() == firstCard.getSuit()) {
+						// Gewielte Kaart spillen
+						agent.sendCommand("", CardPlayer.Command.CARD_TO_LINE,
+					              currentPlayerIndex, card.getCardNumber());
+						makeBid(card);
+						agent.sendCommand("", CardPlayer.Command.READY_TO_PLAY);
+					} else {
+						// Kann den Spiller bekennen ? (Ausser dei eenzeg Kaart vun deem Suit as eng Tromp)
+						if ((hands[currentPlayerIndex].extractCardsWithSuit(firstCard.getSuit()).getNumberOfCards() > 0) || 
+							((hands[currentPlayerIndex].extractCardsWithSuit(firstCard.getSuit()).getNumberOfCards() > 0) && (hands[currentPlayerIndex].getNumberOfCardsWithRank(Rank.QUEEN) == 0))) {
+							// Et muss bekannt gin
+							setStatusText(firstCard.getSuit() + " bekennen!");
+						} else {
+							// Dei gewielten Kaart spillen
+							agent.sendCommand("", CardPlayer.Command.CARD_TO_LINE,
+						              currentPlayerIndex, card.getCardNumber());
+							makeBid(card);
+							agent.sendCommand("", CardPlayer.Command.READY_TO_PLAY);
+						}
+					}
+				}
+			}
+    	} else {
+    		hands[currentPlayerIndex].setTouchEnabled(false);
+            agent.sendCommand("", CardPlayer.Command.CARD_TO_LINE,
+              currentPlayerIndex, card.getCardNumber());
+            makeBid(card);
+            agent.sendCommand("", CardPlayer.Command.READY_TO_PLAY);
+    	}
       }
       
       public void makeBid(Card card) {
-  		card.transfer(bids[currentPlayerIndex], true);
+  		card.transfer(line, true);
+  		if (nbMovesInRound == 3){
+			setStatusText("Round end...");
+        	  nbMovesInRound = 0;
+        	  //currentPlayer = transferToWinner();
+        	  firstPlayer = currentPlayerIndex;
+        	  //stocks[currentPlayer].draw();
+		} else
+			nbMovesInRound++;
+		if (hands[currentPlayerIndex].isEmpty())
+			setStatusText("Game over");
+		else {
+			//setStatusText("Current player: " + currentPlayer);
+			//hands[currentPlayer].setTouchEnabled(true);
+		}
       }
     });
 
@@ -269,23 +340,25 @@ public class CardTable extends CardGame
 	  switch (trumpIndex) {
 	  case 0:
 		  trompTxt = "Kräizer";
-        break;
-      
+		  trump = new Card(deck, Suit.CLUBS, Rank.ACE);
+	  break;
 	  case 1:
 		  trompTxt = "Rauten";
-        break;
-        
+		  trump = new Card(deck, Suit.DIAMONDS, Rank.ACE);
+	  break; 
 	  case 2:
 		  trompTxt = "Häerzer";
-        break;
-        
+		  trump = new Card(deck, Suit.HEARTS, Rank.ACE);
+	  break; 
 	  case 3:
 		  trompTxt = "Schëppen";
-        break;
+		  trump = new Card(deck, Suit.SPADES, Rank.ACE);
+	  break;
 	  }
-		setStatusText(trompTxt + " as Tromp!");
-		trompText.setText(trompTxt + " as Tromp");
-		trompText.setBgColor(Color.white);
-		trompText.show();
+	  setStatusText(trompTxt + " as Tromp!");
+	  trompText.setText(trompTxt + " as Tromp");
+	  trompText.setBgColor(Color.white);
+      trompText.show();
+	  
   }
 }

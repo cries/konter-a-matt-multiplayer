@@ -7,7 +7,7 @@ import java.util.*;
 
 public class CardPlayer
 {
-  private final static boolean debug = false;
+  private final static boolean debug = true;
   private final String serverName = "CardServer";
   private String sessionID = "CardGame &4**&/**()";
   private TcpAgent agent;
